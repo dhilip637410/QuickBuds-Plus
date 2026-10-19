@@ -17,6 +17,11 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Voice call answering (probe in Dev tools): the earbuds' microphone through the call link, in the
+         background service. Asked only when the probe is armed or tried. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Widget taps tick through the vibrator (Haptics.tick); no view of ours is on screen then. -->
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -31,6 +36,8 @@
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <!-- Auto-answer › Which calls: Android gives the caller's number only with this. Asked when a contact filter is chosen. -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Voice answer: the caller's name from the contacts, for the spoken prompt. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!--
       Needed only so the app can hand a downloaded APK to Android's own package
@@ -72,6 +79,13 @@
       instead, which runs before this attribute would ever have been read. If a
       theme is added back here, the app crashes on launch again.
     -->
+    <!-- Voice music: the music apps it lists and controls (Android 11+ shows only declared kinds of apps). -->
+    <queries>
+        <intent><action android:name="android.media.browse.MediaBrowserService" /></intent>
+        <intent><action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" /></intent>
+        <intent><action android:name="android.intent.action.MEDIA_BUTTON" /></intent>
+    </queries>
+
     <application
         android:name=".QuickBudsApp"
         android:allowBackup="true"
@@ -183,6 +197,33 @@
             android:name=".ui.AutoAnswerActivity"
             android:exported="false" />
         <activity
+            android:name=".ui.BikeModeActivity"
+            android:exported="false" />
+        <!-- Voice music: notification access, which Android requires to control other apps' music. Reads none. -->
+        <service
+            android:name=".music.MusicAccessService"
+            android:exported="true"
+            android:label="@string/vm_title"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+        <activity
+            android:name=".ui.VoiceMusicActivity"
+            android:exported="false" />
+        <!-- Bike mode: a quick settings tile that turns auto-answer (3 s) on or off. -->
+        <service
+            android:name=".ui.BikeModeTile"
+            android:exported="true"
+            android:icon="@drawable/ic_bike"
+            android:label="@string/bike_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+        <activity
             android:name=".ui.DisconnectPlacesActivity"
             android:exported="false" />
         <!-- Portrait: the compass heading follows the phone's own axes. -->
@@ -243,7 +284,7 @@
 
         <service
             android:name=".bluetooth.BudsService"
-            android:foregroundServiceType="connectedDevice"
+            android:foregroundServiceType="connectedDevice|microphone"
             android:stopWithTask="false"
             android:exported="false" />
 

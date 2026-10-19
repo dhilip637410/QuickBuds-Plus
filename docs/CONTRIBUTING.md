@@ -30,8 +30,8 @@ echo "sdk.dir=$HOME/Android/Sdk" > local.properties   # your SDK path
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-- The first build downloads Gradle 9.6.0 through the wrapper. Nothing else to install: the only
-  library is `androidx.core`.
+- The first build downloads Gradle 9.6.0 through the wrapper. Nothing else to install. The libraries are
+  `androidx.core`, and Vosk with JNA for Bike mode's offline voice commands.
 - **A debug build cannot install over the release app** (different signing key). Uninstall the
   release first, and uninstall the debug build before going back.
 - `./gradlew assembleRelease` without the release key builds an unsigned APK. That is expected.
@@ -84,7 +84,7 @@ Read before changing anything:
 - **Docs change with the code.** A protocol change comes with its PROTOCOL.md entry in the same commit.
 - **A new user-visible string needs all 27 translations** (`app/src/main/res/values-*`). Machine
   drafts are fine; lint does not catch a missing one.
-- No new dependencies, no Material Components. Every activity is portrait-locked by hand.
+- No new dependencies (one exception: Vosk, for offline "Hey Jarvis"), no Material Components. Every activity is portrait-locked by hand.
 - Widget layouts are generated: edit `scripts/widget-layouts.py` and rerun it, never the XML.
 - Test on real buds and say which model and firmware in the pull request.
 - No vendor code, class names or file names in the repo, only the bytes on the wire.

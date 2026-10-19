@@ -100,12 +100,18 @@ class SettingsActivity : Activity() {
             sensitivityRow
         )
 
-        // Calls: auto-answer, for any earbuds; here because Earbud settings is hidden while other earbuds are selected.
+        // Calls: auto-answer and voice answer, for any earbuds; here because Earbud settings is hidden while other
+        // earbuds are selected.
         val callsRow = link(R.drawable.ic_earbud, R.string.auto_answer_title, 0) {
             startActivity(Intent(this, AutoAnswerActivity::class.java))
         }
         callsSubtitle = SettingRowFactory.subtitle(this, callsRow)
-        section(R.string.auto_answer_section, callsRow)
+        // Bike mode: what it turns on (auto-answer, voice answer, voice music), and on/off as the tile.
+        val bikeRow = link(R.drawable.ic_bike, R.string.bike_tile_label, 0) {
+            startActivity(Intent(this, BikeModeActivity::class.java))
+        }
+        bikeSubtitle = SettingRowFactory.subtitle(this, bikeRow)
+        section(R.string.auto_answer_section, callsRow, bikeRow)
 
         val version = UpdateChecker.installed(this)
         val updateRow = link(R.drawable.ic_update, R.string.row_update_title, 0) {
@@ -131,6 +137,7 @@ class SettingsActivity : Activity() {
 
     private var themeSubtitle: android.widget.TextView? = null
     private var callsSubtitle: android.widget.TextView? = null
+    private var bikeSubtitle: android.widget.TextView? = null
 
     /**
      * Background service switch. Turning it off asks first (the widget and the automatic reconnect
@@ -349,6 +356,7 @@ class SettingsActivity : Activity() {
         super.onResume()
         themeSubtitle?.text = ThemeRes.palette(this).name
         callsSubtitle?.text = AutoAnswerActivity.summary(this)
+        bikeSubtitle?.text = BikeModeActivity.summary(this)
         renderUsageValues()
         // Back from Android's notification settings: the rows say what is allowed now.
         renderNotifyRows()

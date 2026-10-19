@@ -118,9 +118,29 @@ class AutoAnswerMonitor(private val context: Context) {
         override fun onReceive(c: Context, intent: Intent) {
             when (intent.getStringExtra(TelephonyManager.EXTRA_STATE)) {
                 TelephonyManager.EXTRA_STATE_RINGING -> {
-                    if (!AutoAnswer.enabled(context)) return
+                    // Voice answer probe (Dev tools): measures this one call, answers nothing.
+                    if (VoiceProbe.armed(context) && !VoiceAnswer.enabled(context)) {
+                        VoiceProbe.setArmed(context, false)
+                        handler.removeCallbacks(answer)
+                        VoiceProbe.run(context, "ringing")
+                        onProbeDone()
+                        return
+                    }
                     @Suppress("DEPRECATION")
                     intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)?.takeIf { it.isNotBlank() }?.let { incoming = it }
+                    // Voice answer, once the number is known (the second of the two broadcasts): it asks the
+                    // user, so the timed auto-answer waits. No clear reply: auto-answer answers then.
+                    val number = incoming
+                    if (number != null && !voiceAsked && VoiceAnswer.enabled(context)) {
+                        voiceAsked = true
+                        callHeadset { headset ->
+                            if (VoiceAnswer.onRinging(context, number, headset) { tryAnswer() }) {
+                                voiceTookCall = true
+                                handler.removeCallbacks(answer)
+                            }
+                        }
+                    }
+                    if (!AutoAnswer.enabled(context) || voiceTookCall) return
                     // The broadcast comes twice (with and without the number): one timer.
                     handler.removeCallbacks(answer)
                     handler.postDelayed(answer, AutoAnswer.delaySeconds(context) * 1000L)
@@ -129,15 +149,25 @@ class AutoAnswerMonitor(private val context: Context) {
                 // Answered or rejected by the user, or ended: nothing to do.
                 TelephonyManager.EXTRA_STATE_OFFHOOK, TelephonyManager.EXTRA_STATE_IDLE -> {
                     handler.removeCallbacks(answer)
+                    VoiceAnswer.onStoppedRinging()
                     incoming = null
+                    voiceAsked = false
+                    voiceTookCall = false
                 }
             }
         }
     }
 
-    /** Registered while the feature is on and allowed; called on start and when the setting changes. */
+    /** The voice probe ran: the service drops the microphone type again. */
+    var onProbeDone: () -> Unit = {}
+
+    /** This call: voice answer looked at it once; it asked the user (the timed auto-answer then waits). */
+    private var voiceAsked = false
+    private var voiceTookCall = false
+
+    /** Registered while the feature is on and allowed, or the voice probe is armed; on start and on setting changes. */
     fun update() {
-        val want = AutoAnswer.enabled(context)
+        val want = AutoAnswer.enabled(context) || VoiceProbe.armed(context) || VoiceAnswer.enabled(context)
         if (want && !registered) {
             val filter = IntentFilter(TelephonyManager.ACTION_PHONE_STATE_CHANGED)
             // A system broadcast: exported, so the system's sender reaches it.

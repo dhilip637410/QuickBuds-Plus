@@ -107,6 +107,16 @@ class QuickBudsApp : Application() {
         // because colours are applied at inflation (ThemeRes.select), not afterwards.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityResumed(a: Activity) {
+                // Voice answer: Android lets the background service keep the microphone only if it takes it while
+                // an app screen is open. Now is such a moment.
+                if ((com.spizganed.quickbuds.calls.VoiceAnswer.switchedOn(a) || com.spizganed.quickbuds.music.VoiceMusic.switchedOn(a)) &&
+                    a.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    runCatching {
+                        a.startService(android.content.Intent(a, com.spizganed.quickbuds.bluetooth.BudsService::class.java)
+                            .setAction(com.spizganed.quickbuds.bluetooth.BudsService.ACTION_VOICE_PROBE)
+                            .putExtra(com.spizganed.quickbuds.bluetooth.BudsService.EXTRA_FIND_ON, true))
+                    }
+                }
                 ThemeRes.fadeInFromSnapshot(a)
                 if (ThemeRes.isStale(a)) ThemeRes.recreateFaded(a)
             }

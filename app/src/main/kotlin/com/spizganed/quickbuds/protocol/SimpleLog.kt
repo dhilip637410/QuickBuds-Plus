@@ -48,6 +48,7 @@ object SimpleLog {
             msg.startsWith("BUDS: ") -> link("Buds: " + msg.removePrefix("BUDS: "))
             msg.startsWith("OTHER EARBUDS: ") -> got("Other earbuds: " + msg.removePrefix("OTHER EARBUDS: "))
             msg.startsWith("FASTPAIR: ") -> got("Fast Pair battery: " + msg.removePrefix("FASTPAIR: "))
+            msg.startsWith("VOICE: ") -> got("Voice test: " + msg.removePrefix("VOICE: "))
             msg.startsWith("PRODUCT ID:") -> got("Buds: " + (Regex("model: ([^,]+)").find(msg)?.groupValues?.get(1) ?: "unknown model"))
             msg.startsWith("FIRMWARE:") -> got("Firmware version " + after.substringBefore(" "))
             msg.startsWith("WEAR ") -> got(wear(after))

@@ -121,6 +121,8 @@ class DevToolsActivity : Activity() {
             showInLog(if (RfcommBridge.running) "bridge off requested"
                 else "bridge on requested: QB_BRIDGE=127.0.0.1:${RfcommBridge.PORT}")
         })
+        // Voice call answering, measured before it is built: speak, open the earbud microphone, listen, log.
+        actions.addView(action(R.drawable.ic_earbud, "Voice") { voiceSheet() })
         // Proves the crash logger catches a crash before any app logic: arms a throw at the
         // very start of the next launch (QuickBudsApp.attachBaseContext), then closes the app.
         actions.addView(action(R.drawable.ic_warning, "Crash test") {
@@ -231,6 +233,41 @@ class DevToolsActivity : Activity() {
      * to reason about the protocol.
      *
      */
+    /** Try now (this screen is open) or arm for the next call (logged in the background, phone on vibrate). */
+    private fun voiceSheet() {
+        val needed = listOf(android.Manifest.permission.RECORD_AUDIO, android.Manifest.permission.READ_PHONE_STATE)
+            .filter { checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED }
+        if (needed.isNotEmpty()) {
+            showInLog("voice test needs the microphone and phone permissions: allow them, then tap Voice again")
+            return requestPermissions(needed.toTypedArray(), 91)
+        }
+        val armed = com.spizganed.quickbuds.calls.VoiceProbe.armed(this)
+        BottomSheetDialog(this).title("Voice answer test").message(
+            "Measures only: it never answers, declines or changes the ringer. Put the phone on vibrate for the call test."
+        ).items(listOf(
+            BottomSheetDialog.Item("Try now (speak, then say yes or no)", false) {
+                showInLog("voice test: try now")
+                com.spizganed.quickbuds.calls.VoiceProbe.run(this, "try now")
+            },
+            BottomSheetDialog.Item("Download English (India), on-device", false) {
+                showInLog("voice test: en-IN download requested")
+                com.spizganed.quickbuds.calls.VoiceProbe.downloadModel(this, "en-IN")
+            },
+            BottomSheetDialog.Item("Download Tamil, on-device", false) {
+                showInLog("voice test: ta-IN download requested")
+                com.spizganed.quickbuds.calls.VoiceProbe.downloadModel(this, "ta-IN")
+            },
+            BottomSheetDialog.Item(if (armed) "Disarm the call test" else "Arm for the next incoming call", armed) {
+                val on = !armed
+                com.spizganed.quickbuds.calls.VoiceProbe.setArmed(this, on)
+                // While this screen is open: the service may take the microphone now, for use in the background.
+                startService(Intent(this, BudsService::class.java).setAction(BudsService.ACTION_VOICE_PROBE)
+                    .putExtra(BudsService.EXTRA_FIND_ON, on))
+                showInLog(if (on) "voice test armed: lock the phone and have someone call you" else "voice test disarmed")
+            }
+        )).show()
+    }
+
     private fun showInLog(message: String) {
         logText.append("\n[dev] $message\n")
         lastLineCount = PacketLogger.getLines().size

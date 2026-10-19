@@ -24,12 +24,14 @@ android {
     defaultConfig {
         minSdk = 26
         targetSdk = 37
+        // Vosk's native recognizer: phone processors only (ARM), not emulator ones, to keep the APK small.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
 
         // THE ONLY PLACE the version is declared. It used to live on <application> in the manifest,
         // where Android ignores it: every PC build up to 2026-09-23 shipped with NO version, which
         // UpdateActivity (reads PackageManager) and bundletool ("Version code not found") both hit.
-        versionCode = 48
-        versionName = "4.10.12"
+        versionCode = 49
+        versionName = "4.10.13"
     }
 
     signingConfigs {
@@ -84,6 +86,10 @@ kotlin {
 
 dependencies {
     implementation("androidx.core:core:1.13.1")
+    // Bike mode's voice music: offline "Hey Jarvis" and the commands (Vosk, Apache 2.0; JNA is its bridge to the
+    // native recognizer). The one exception to "no new dependencies", by the developer's choice (2026-10-19).
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
     // Tests only, not in the APK: the usage and loss-protection logic (`./gradlew testDebugUnitTest`).
     testImplementation("junit:junit:4.13.2")
 }

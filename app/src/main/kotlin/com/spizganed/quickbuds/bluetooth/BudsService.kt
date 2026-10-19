@@ -2,6 +2,7 @@ package com.spizganed.quickbuds.bluetooth
 
 import android.annotation.SuppressLint
 import android.app.Notification
+import android.content.pm.ServiceInfo
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -133,7 +134,21 @@ class BudsService : Service(), BudsConnectionManager.Listener {
                 discoverOther()
             }
             CaseReminderMonitor.KEY_ENABLED -> caseReminder?.onSettingsChanged()
-            com.spizganed.quickbuds.calls.AutoAnswer.KEY_ENABLED, com.spizganed.quickbuds.calls.AutoAnswer.KEY_DELAY -> autoAnswer?.update()
+            com.spizganed.quickbuds.calls.AutoAnswer.KEY_ENABLED, com.spizganed.quickbuds.calls.AutoAnswer.KEY_DELAY,
+            com.spizganed.quickbuds.calls.VoiceProbe.KEY_ARMED -> {
+                autoAnswer?.update()
+            }
+            // Voice music listens while Bike mode is on: any of these can start or stop it.
+            com.spizganed.quickbuds.calls.BikeMode.KEY_ON, com.spizganed.quickbuds.music.VoiceMusic.KEY_ENABLED,
+            com.spizganed.quickbuds.music.VoiceMusic.KEY_APP -> {
+                voiceMusic.sync()
+                if (key == com.spizganed.quickbuds.music.VoiceMusic.KEY_ENABLED && !micWanted()) setMicrophone(false)
+            }
+            com.spizganed.quickbuds.calls.VoiceAnswer.KEY_ENABLED -> {
+                autoAnswer?.update()
+                // Turned off: the microphone goes now. Turned on: it comes when an app screen asks (it is open now).
+                if (!micWanted()) setMicrophone(false)
+            }
             com.spizganed.quickbuds.proximity.DisconnectPlaces.KEY_ENABLED -> syncLocationBuffer()
             BatteryCard.KEY_ENABLED -> { BatteryCard.update(this); other?.onSettingsChanged(); discoverOther() }
             LowBatteryAlert.KEY_ENABLED -> {
@@ -159,7 +174,12 @@ class BudsService : Service(), BudsConnectionManager.Listener {
         proximity = ProximityMonitor(this).also { it.connected = { manager?.isConnected() == true } }
         caseReminder = CaseReminderMonitor(this)
         other = OtherEarbudsMonitor(this).also { it.supportedBudsConnected = { manager?.isConnected() == true } }
-        autoAnswer = com.spizganed.quickbuds.calls.AutoAnswerMonitor(this).also { it.update() }
+        autoAnswer = com.spizganed.quickbuds.calls.AutoAnswerMonitor(this).also {
+            it.onProbeDone = {
+                handler.postDelayed({ if (!micWanted()) setMicrophone(false) }, 15_000L)
+            }
+            it.update()
+        }
         ConnectedDevices.addListener(connectedDevicesListener)
         // A new version on GitHub: a notification, also with the app closed (an hourly job, kept by Android).
         com.spizganed.quickbuds.ui.UpdateJob.sync(this)
@@ -302,6 +322,11 @@ class BudsService : Service(), BudsConnectionManager.Listener {
                     manager?.sendHoldAncModes(mask, intent.getIntExtra(EXTRA_HOLD_TYPE, OpoProtocol.HOLD_TYPE_SHARED))
                 }
             }
+            ACTION_VOICE_PROBE -> {
+                setMicrophone(intent.getBooleanExtra(EXTRA_FIND_ON, false))
+                // An app screen is open: notification access or the music app may have changed too.
+                voiceMusic.sync()
+            }
             ACTION_FIND_BUDS -> {
                 val on = intent.getBooleanExtra(EXTRA_FIND_ON, false)
                 statusLog("<< FIND_BUDS: $on")
@@ -433,11 +458,45 @@ class BudsService : Service(), BudsConnectionManager.Listener {
         }
         // Android 12+ refuses the foreground from the background (seen on Android 16: a sticky restart). Was: a
         // crash. Is: the service stops; the next app start or buds connect starts it again.
+        fgNotification = notification
         try {
-            startForeground(1, notification)
+            // The type named: the manifest also lists microphone, used only while the voice probe is armed.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            else startForeground(1, notification)
+            // A fresh foreground start holds no microphone: voice answer waits for the next app screen.
+            microphoneReady = false
         } catch (e: IllegalStateException) {
             PacketLogger.error("service foreground refused", e)
             stopSelf()
+        }
+    }
+
+    private var fgNotification: Notification? = null
+
+    /** Voice music's listener (Bike mode on, voice music on). */
+    private val voiceMusic by lazy { com.spizganed.quickbuds.music.VoiceMusicLoop(this) }
+
+    /** The microphone stays while voice answer or voice music is on. */
+    private fun micWanted() = com.spizganed.quickbuds.calls.VoiceAnswer.switchedOn(this) ||
+        com.spizganed.quickbuds.music.VoiceMusic.switchedOn(this)
+
+    /**
+     * Voice answer probe: adds the microphone to this running foreground service, or takes it off. Android allows
+     * the microphone in the background only to a foreground service of that type started while the app is on
+     * screen: [on] is sent from Dev tools, so the app is on screen then. The probe measures whether this holds.
+     */
+    private fun setMicrophone(on: Boolean) {
+        val n = fgNotification ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+            (if (on) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+        if (on == microphoneReady) return
+        try {
+            startForeground(1, n, type)
+            microphoneReady = on
+            PacketLogger.log("VOICE: background service microphone ${if (on) "on" else "off"}")
+        } catch (e: Exception) {
+            PacketLogger.log("VOICE: background service microphone refused: ${e.javaClass.simpleName}: ${e.message}")
         }
     }
 
@@ -460,6 +519,7 @@ class BudsService : Service(), BudsConnectionManager.Listener {
         try { unregisterReceiver(linkReceiver) } catch (_: Exception) {}
         other?.destroy()
         autoAnswer?.stop()
+        voiceMusic.destroy()
         ConnectedDevices.removeListener(connectedDevicesListener)
         com.spizganed.quickbuds.proximity.LocationBuffer.sync(this, anyConnected = false)
         getSharedPreferences(ThemeRes.PREFS_NAME, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(prefsListener)
@@ -690,6 +750,15 @@ class BudsService : Service(), BudsConnectionManager.Listener {
         /** On-call gestures (`btn 0x06`). See BudsConnectionManager.sendOnCall*(). */
         const val ACTION_SET_ON_CALL = "com.spizganed.quickbuds.SET_ON_CALL"
         const val ACTION_FIND_BUDS = "com.spizganed.quickbuds.FIND_BUDS"
+        /**
+         * True while this service holds the microphone type: voice answer can listen in the background. Lost when
+         * the service restarts in the background; back on the next app screen ([QuickBudsApp]).
+         */
+        @Volatile var microphoneReady = false
+            private set
+
+        /** Dev tools › Voice and voice answer: the microphone on the foreground service (extra [EXTRA_FIND_ON] true) or off. */
+        const val ACTION_VOICE_PROBE = "com.spizganed.quickbuds.VOICE_PROBE"
         const val PREF_SMART_PAUSE = "smart_auto_pause"
 
         /** Earbuds of other brands: connected / disconnected ([OtherEarbudsMonitor]), the device in EXTRA_DEVICE. */
