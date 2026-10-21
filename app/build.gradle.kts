@@ -22,6 +22,9 @@ android {
     compileSdk = 37
 
     defaultConfig {
+        // QuickBuds Plus (dhilip637410/QuickBuds-Plus): its own app id, so it installs next to upstream QuickBuds and
+        // never updates from it. The Kotlin packages keep `com.spizganed.quickbuds` (namespace) for upstream merges.
+        applicationId = "com.dhilip.quickbuds"
         minSdk = 26
         targetSdk = 37
         // Vosk's native recognizer: phone processors only (ARM), not emulator ones, to keep the APK small.

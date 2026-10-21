@@ -21,7 +21,8 @@ import java.io.File
  */
 object UpdateChecker {
 
-    private const val REPO = "MageshwarSV/QuickBuds"
+    // QuickBuds Plus releases. Upstream QuickBuds is MageshwarSV/QuickBuds (a different app id: never offered here).
+    private const val REPO = "dhilip637410/QuickBuds-Plus"
     private const val API = "https://api.github.com/repos/$REPO/releases?per_page=30"
     const val PAGE = "https://github.com/$REPO"
 

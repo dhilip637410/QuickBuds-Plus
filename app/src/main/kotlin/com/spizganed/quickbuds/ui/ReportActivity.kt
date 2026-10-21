@@ -143,23 +143,16 @@ class ReportActivity : Activity() {
         sheet.show()
     }
 
+    /** QuickBuds Plus: opens the filled-in GitHub issue ([ProblemReport.issueUrl]) in the browser. */
     private fun submit() {
         if (!ready()) return
-        sending = true
-        send.setText(R.string.problem_sending)
-        paintSend()
-        val body = body()
-        val main = Handler(Looper.getMainLooper())
-        Thread {
-            val ok = ProblemReport.send(body)
-            main.post {
-                sending = false
-                send.setText(R.string.problem_send)
-                paintSend()
-                Toast.makeText(this, if (ok) R.string.problem_sent else R.string.problem_failed, Toast.LENGTH_LONG).show()
-                if (ok) finish()
-            }
-        }.start()
+        val url = ProblemReport.issueUrl(model.text.toString().trim().ifEmpty { "unknown buds" }, body())
+        try {
+            startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+            finish()
+        } catch (e: android.content.ActivityNotFoundException) {
+            Toast.makeText(this, R.string.problem_failed, Toast.LENGTH_LONG).show()
+        }
     }
 
     companion object {

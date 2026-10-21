@@ -1,4 +1,18 @@
-# QuickBuds
+# QuickBuds (QuickBuds Plus fork)
+
+> **This is QuickBuds Plus**, a fork of [MageshwarSV/QuickBuds](https://github.com/MageshwarSV/QuickBuds)
+> by Mageshwar SV, under the same GPL-3.0 license. It adds boAt earbuds and other Fast Pair earbuds,
+> and installs as its own app (`com.dhilip.quickbuds`) next to the original. Download it from
+> [this fork's releases](https://github.com/dhilip637410/QuickBuds-Plus/releases/latest) and report
+> problems in [this fork's issues](https://github.com/dhilip637410/QuickBuds-Plus/issues).
+>
+> Changes from upstream:
+> - Left, right and case battery for Fast Pair earbuds (boAt Airdopes 800 tested), read from the
+>   earbuds' Fast Pair Message Stream.
+> - No connect attempts to paired buds that are not connected to the phone.
+> - Updates, problem reports (GitHub issues) and links point to this fork.
+>
+> The rest of this README is upstream's; the links to MageshwarSV/QuickBuds are the original app.
 
 > Open-source HeyMelody alternative for Android. Control OnePlus / OPPO / realme earbuds over
 > Bluetooth, no root: battery, noise cancellation (ANC), equalizer, hearing profile, gestures, wear
@@ -6,8 +20,7 @@
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Android%208%2B-3DDC84.svg)]()
-[![Release](https://img.shields.io/github/v/release/MageshwarSV/QuickBuds)](https://github.com/MageshwarSV/QuickBuds/releases/latest)
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-Support-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/spizganed)
+[![Release](https://img.shields.io/github/v/release/dhilip637410/QuickBuds-Plus)](https://github.com/dhilip637410/QuickBuds-Plus/releases/latest)
 
 QuickBuds does everything the vendor app does for your earbuds, in a fast, clean app with a real
 home-screen widget.

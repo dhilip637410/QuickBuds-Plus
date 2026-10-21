@@ -8,17 +8,14 @@ import com.spizganed.quickbuds.bluetooth.BudsConnectionManager
 import com.spizganed.quickbuds.bluetooth.PacketLogger
 import com.spizganed.quickbuds.protocol.Capabilities
 import com.spizganed.quickbuds.protocol.ModelCatalog
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 
 /**
- * The problem report: a Google Form (`formResponse`, no sign-in), filled by [ReportActivity].
- * The desktop app posts to the same form (desktop/src/report.rs). A changed form question gets a new id.
+ * The problem report, filled by [ReportActivity] and sent as a GitHub issue ([issueUrl]). The entry ids below are
+ * upstream's Google Form fields; here they only key [body] and [preview].
  */
 object ProblemReport {
 
-    private const val FORM = "https://docs.google.com/forms/d/e/1FAIpQLScPNdmogyip2EDWZayNUSW3ElYz674GAC7t7BZuFNHgvxGP_Q/formResponse"
     private const val ENTRY_MODEL = "entry.849813820"
     private const val ENTRY_CATEGORY = "entry.494675210"
     private const val ENTRY_DESCRIPTION = "entry.1786789589"
@@ -105,24 +102,31 @@ object ProblemReport {
         }
     }
 
-    /** Posts [body]. Network thread only. True when Google took it. */
-    fun send(body: String): Boolean {
-        val conn = URL(FORM).openConnection() as HttpURLConnection
-        return try {
-            conn.requestMethod = "POST"
-            conn.doOutput = true
-            conn.connectTimeout = 15_000
-            conn.readTimeout = 15_000
-            conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-            conn.outputStream.use { it.write(body.toByteArray()) }
-            val code = conn.responseCode
-            if (code != 200) PacketLogger.log("REPORT: form answered $code")
-            code == 200
-        } catch (e: Exception) {
-            PacketLogger.error("report send", e)
-            false
-        } finally {
-            conn.disconnect()
+    /**
+     * QuickBuds Plus: a new GitHub issue on its own repo, filled with [preview] of [body]. The person reviews it and
+     * submits it in the browser (a GitHub account is needed); nothing is posted from the app. The upstream Google Form
+     * belongs to upstream QuickBuds. A link over [MAX_ISSUE_URL] loses the oldest log lines, as [body] does.
+     */
+    fun issueUrl(model: String, body: String): String {
+        fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
+        val base = "${UpdateChecker.PAGE}/issues/new?title=${enc("Problem report: $model")}&body="
+        val budget = MAX_ISSUE_URL - base.length
+        val text = preview(body)
+        if (enc(text).length <= budget) return base + enc(text)
+        // Too long: the questions and the log's header line stay, the oldest log lines go.
+        val at = text.indexOf("\n\nLog:\n")
+        if (at < 0) return base + enc(text.take(budget / 3))
+        val head = text.substring(0, at) + "\n\nLog:\n"
+        val lines = text.substring(at + 7).lines()
+        var from = 1
+        while (from < lines.size) {
+            val kept = head + (listOf(lines[0], "[older lines removed]") + lines.drop(from)).joinToString("\n")
+            if (enc(kept).length <= budget) return base + enc(kept)
+            from += maxOf(1, (lines.size - from) / 10)
         }
+        return base + enc((head + lines[0]).take(budget / 3))
     }
+
+    /** GitHub refuses new-issue links much over 8 KB. */
+    private const val MAX_ISSUE_URL = 7_500
 }
