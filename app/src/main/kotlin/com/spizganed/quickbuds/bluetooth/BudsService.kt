@@ -389,8 +389,19 @@ class BudsService : Service(), BudsConnectionManager.Listener {
         statusLog("[SVC] FORCE_CONNECT: connecting...")
         try {
             val device = BudsDevice.find(this)
-            if (device != null) manager?.connect(device, withAudio)
-            else statusLog("[SVC] No paired OPPO / OnePlus / realme buds found")
+            if (device == null) { statusLog("[SVC] No paired OPPO / OnePlus / realme buds found"); return }
+            // As on opening the app (MainActivity.connectOnOpen): saved buds that are not connected while other earbuds
+            // are get no connect, from the pill, the widget or Dev tools. Was: four rounds of three UUIDs at buds out of
+            // range (Page Timeout), and the audio pulled toward them, away from the earbuds in use.
+            ConnectedAudio.query(this) { connected ->
+                val others = connected?.values?.filter { it.address != device.address }.orEmpty()
+                if (connected != null && device.address !in connected && others.isNotEmpty()) {
+                    PacketLogger.log("BUDS: ${device.name} not connected, " +
+                        "${others.joinToString { runCatching { it.name }.getOrNull() ?: it.address }} in use: connect skipped")
+                    return@query
+                }
+                if (manager?.isConnected() != true) manager?.connect(device, withAudio)
+            }
         } catch (e: Exception) {
             statusLog("[SVC] Force connect failed: ${e.message}")
         }

@@ -45,6 +45,13 @@ class FastPairBatteryTest {
         assertNull(FastPairBattery.parse(advert(3, 0x7F, 0x7F, 0x7F)))
     }
 
+    /** Message Stream bodies as an Airdopes 800 sends them (`03 03 00 03` + these). */
+    @Test fun readsMessageStreamBattery() {
+        assertEquals(Levels(100, 100, 99, false, false, false), FastPairBattery.levels(bytes(0x64, 0x64, 0x63)))
+        assertEquals(Levels(-1, 100, 99, false, false, false), FastPairBattery.levels(bytes(0x7F, 0x64, 0x63)))
+        assertNull(FastPairBattery.levels(bytes(0x64, 0x64)))
+    }
+
     private val ours = Levels(80, 75, 50, false, false, false)
     private val theirs = Levels(20, 25, 90, false, false, false)
 

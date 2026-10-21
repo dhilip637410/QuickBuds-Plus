@@ -33,15 +33,24 @@ class OtherEarbudsMonitor(private val context: Context) {
     ) {
         var level = -1
         var parts: FastPairBattery.Levels? = null
+        /** The device's own Fast Pair Message Stream, when it offers one. */
+        var stream: FastPairStream? = null
+        /** [parts] came from [stream]: the device's own word, which a broadcast does not replace. */
+        var streamed = false
     }
 
     /** Left, right and case from Fast Pair broadcasts, trusted only under [FastPairBattery.Picker]'s safeguards. */
     private val fastPair = FastPairScanner(context) { levels ->
         // With two pairs of other earbuds connected, whose broadcast it is cannot be told: one ring each.
         val t = tracked.values.singleOrNull() ?: return@FastPairScanner
-        if (t.parts == levels) return@FastPairScanner
+        if (t.streamed) return@FastPairScanner
+        setParts(t, levels, "broadcast")
+    }
+
+    private fun setParts(t: Tracked, levels: FastPairBattery.Levels?, source: String) {
+        if (t.parts == levels) return
         t.parts = levels
-        if (levels != null) PacketLogger.log("OTHER EARBUDS: Fast Pair battery L=${levels.left} C=${levels.case} R=${levels.right}")
+        if (levels != null) PacketLogger.log("OTHER EARBUDS: Fast Pair battery ($source) L=${levels.left} C=${levels.case} R=${levels.right}")
         // A case reported means TWS, whatever the name suggested.
         if (levels != null && levels.case >= 0 && t.kind != DeviceCatalog.Kind.TWS) {
             t.kind = DeviceCatalog.Kind.TWS
@@ -80,7 +89,7 @@ class OtherEarbudsMonitor(private val context: Context) {
     private fun updateFastPair() {
         // For this check a hands-free or hi-fi device of unknown kind is not earbuds: no scan for a car.
         val kinds = tracked.values.map { if (it.ambiguous && it.kind == null) DeviceCatalog.Kind.HEADPHONES else it.kind }
-        val listen = FastPairBattery.allowed(kinds, BatteryCard.enabled(context))
+        val listen = FastPairBattery.allowed(kinds, BatteryCard.enabled(context)) && tracked.values.none { it.streamed }
         val why = "${kinds.size} other device(s) ${kinds.joinToString()}, card ${if (BatteryCard.enabled(context)) "on" else "off"}"
         if (listen != fastPairListening) {
             fastPairListening = listen
@@ -153,6 +162,16 @@ class OtherEarbudsMonitor(private val context: Context) {
         Usage.connected(context, device)
         proximity?.onConnected(device)
         AudioDevice.batteryLevel(device).takeIf { it > 0 }?.let { onBattery(device, it) }
+        // Earbuds only (or of unknown kind, not a car or receiver): those offer the Message Stream.
+        if (kind == null && !ambiguous || kind == DeviceCatalog.Kind.TWS) {
+            t.stream = FastPairStream(device) { levels ->
+                if (tracked[device.address] !== t) return@FastPairStream
+                t.streamed = true
+                setParts(t, levels, "stream")
+                // Exact levels from the device itself: no broadcast scan needed for it.
+                updateFastPair()
+            }.also { it.start() }
+        }
         handler.removeCallbacks(heartbeat)
         handler.postDelayed(heartbeat, HEARTBEAT_MS)
         updateFastPair()
@@ -168,6 +187,7 @@ class OtherEarbudsMonitor(private val context: Context) {
         // Disconnected by the sleep timer: the user's own choice, not a lost device.
         val reason = if (com.spizganed.quickbuds.sleep.SleepTimer.justDisconnected()) DropReason.USER else reason0
         val t = tracked.remove(address) ?: return
+        t.stream?.stop()
         PacketLogger.log("OTHER EARBUDS: disconnected ($reason)")
         // The loss warning first: its Find nearby button carries the device's name and last level from the entry.
         t.proximity?.onDisconnected(reason)
@@ -177,7 +197,8 @@ class OtherEarbudsMonitor(private val context: Context) {
         // Gone: its low-battery card says nothing true any more.
         LowBatteryAlert.clearOther(context, address)
         if (tracked.isEmpty()) handler.removeCallbacks(heartbeat)
-        tracked.values.forEach { if (it.parts != null) { it.parts = null; publish(it) } }
+        // Broadcast levels were picked for the old set of devices; a stream's are the device's own and stay.
+        tracked.values.forEach { if (it.parts != null && !it.streamed) { it.parts = null; publish(it) } }
         updateFastPair()
     }
 

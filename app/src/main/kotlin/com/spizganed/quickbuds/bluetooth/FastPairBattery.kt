@@ -50,15 +50,18 @@ object FastPairBattery {
             val length = header shr 4
             val type = header and 0x0F
             if (i + 1 + length > data.size) return null
-            if ((type == 3 || type == 4) && length == 3) {
-                fun level(b: Byte) = (b.toInt() and 0x7F).let { if (it > 100) -1 else it }
-                fun charging(b: Byte) = (b.toInt() and 0x80) != 0 && (b.toInt() and 0x7F) <= 100
-                val l = data[i + 1]; val r = data[i + 2]; val c = data[i + 3]
-                return Levels(level(l), level(r), level(c), charging(l), charging(r), charging(c)).takeIf { it.any }
-            }
+            if ((type == 3 || type == 4) && length == 3) return levels(data.copyOfRange(i + 1, i + 4))
             i += 1 + length
         }
         return null
+    }
+
+    /** Three battery bytes (left, right, case), as in the advertisement and the Message Stream ([FastPairStream]). */
+    fun levels(b: ByteArray): Levels? {
+        if (b.size != 3) return null
+        fun level(b: Byte) = (b.toInt() and 0x7F).let { if (it > 100) -1 else it }
+        fun charging(b: Byte) = (b.toInt() and 0x80) != 0 && (b.toInt() and 0x7F) <= 100
+        return Levels(level(b[0]), level(b[1]), level(b[2]), charging(b[0]), charging(b[1]), charging(b[2])).takeIf { it.any }
     }
 
     /**

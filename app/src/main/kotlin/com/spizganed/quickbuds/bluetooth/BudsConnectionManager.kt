@@ -203,12 +203,36 @@ class BudsConnectionManager(private val context: Context) {
     /** Drops or restores the phone's own audio link to the buds ([PhoneAudio]): the pill's Connect / Disconnect. */
     fun setPhoneAudio(device: BluetoothDevice, on: Boolean) = PhoneAudio.set(context, device, on) { log(it) }
 
+    /**
+     * Only to buds the phone has connected. An automatic connect (app opened, ACL, retries, reconnect after loss) to
+     * buds Android does not list as connected is skipped. A connect the user asked for ([withAudio], the pill) may bring
+     * them up, but gets one round and no retries. Was: paired buds out of range were paged 4 rounds x 3 UUIDs (Page
+     * Timeout) on every trigger.
+     */
     fun connect(device: BluetoothDevice, withAudio: Boolean = false) {
         if (isConnecting || isConnected()) {
             log("Already connecting/connected, ignoring.")
             return
         }
         isConnecting = true
+        ConnectedAudio.query(context) { connected ->
+            // Null: Bluetooth cannot be asked; go ahead as before rather than never connecting.
+            val up = connected == null || device.address in connected
+            if (!up && !withAudio) {
+                isConnecting = false
+                reconnectAttempts = 0
+                log("Not connecting to ${device.name}: not connected to the phone")
+                return@query
+            }
+            singleRound = !up
+            connectNow(device, withAudio)
+        }
+    }
+
+    /** The current connect was asked for buds not connected to the phone: no auto-retry after it fails. */
+    private var singleRound = false
+
+    private fun connectNow(device: BluetoothDevice, withAudio: Boolean) {
         lastDevice = device
         // Only a connect the user asked for (the pill) brings phone audio up. An automatic one —
         // ACL receiver, retries, reconnect after loss — leaves audio to Android: asking for A2DP
@@ -274,7 +298,10 @@ class BudsConnectionManager(private val context: Context) {
                 log("All connection methods failed: $lastError")
                 isConnecting = false
                 disconnect()
-                if (reconnectAttempts < 3) {
+                if (singleRound) {
+                    log("Not retrying: ${device.name} is not connected to the phone.")
+                    reconnectAttempts = 0
+                } else if (reconnectAttempts < 3) {
                     reconnectAttempts++
                     log("Auto-retry $reconnectAttempts/3 in 5s...")
                     handler.postDelayed({
